@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Le Nhat — My Gallery</title>
+    <link rel="icon" href="	https://lh3.googleusercontent.com/ogw/AF2bZyhK6fFfg1U7Mm84a3X7Dr1C5ZM9vw_tW3rhp4knhrbZ4og=s64-c-mo" type="image/x-icon" />
+    <meta
+      name="description"
+      content="An archival 3D photography portfolio by Le Nhat, navigated through real-time hand gestures and spatial interaction."
+    />
+
+    <!-- Google Fonts: Cormorant Garamond, Playfair Display & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/gesture-hud.css" />
+
+    <!-- External Libraries: Three.js r128 & MediaPipe Hands -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <!-- Fullscreen 3D Canvas Container -->
+    <div id="canvas-container" aria-label="3D Archival Canvas"></div>
+
+    <!-- Centerpiece Floating Headline (Over/Behind 3D Space) -->
+    <div
+      class="centerpiece-headline"
+      id="centerpiece-headline"
+      aria-hidden="true"
+    >
+      <span class="headline-eyebrow">Photo by Le Nhat</span>
+      <h2 class="headline-title">Stories in Motion</h2>
+      <!-- <p class="headline-tagline">
+        Photographic expeditions across remote frontiers
+      </p> -->
+    </div>
+
+    <!-- Top App Navigation / Header Bar -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-text">
+          <h1 class="brand-title">Le Nhat</h1>
+          <span class="brand-subtitle">Archive 2026 · Photography</span>
+        </div>
+      </div>
+
+      <!-- Active Gesture Status Badge (Top-Center) -->
+      <div
+        id="gesture-toast"
+        class="gesture-status-badge state-idle"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="gesture-icon" id="gesture-icon">✋</span>
+        <span class="gesture-name" id="gesture-name">Ready</span>
+        <div class="status-pulse-dot"></div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="header-actions">
+        <button
+          id="btn-studio"
+          class="header-btn studio-btn"
+          title="Curator Studio — Add Artwork & Manage Archive"
+          aria-label="Curator Studio"
+        >
+          <i data-lucide="plus-circle"></i>
+          <span class="btn-text">Studio</span>
+        </button>
+        <button
+          id="btn-help"
+          class="header-btn"
+          title="Gesture Instructions Guide"
+          aria-label="Gesture Instructions Guide"
+        >
+          <i data-lucide="help-circle"></i>
+          <span class="btn-text">Guide</span>
+        </button>
+        <button
+          id="btn-hud-toggle"
+          class="header-btn"
+          title="Toggle Optical Tracker Feed"
+          aria-label="Toggle Optical Tracker Feed"
+        >
+          <i data-lucide="camera"></i>
+          <span class="btn-text">Camera</span>
+        </button>
+        <button
+          id="btn-fullscreen"
+          class="header-btn icon-only"
+          title="Toggle Fullscreen"
+          aria-label="Toggle Fullscreen"
+        >
+          <i data-lucide="maximize"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Discrete Camera HUD Box (Top-Right Floating) -->
+    <aside
+      id="camera-hud"
+      class="camera-hud-box status-lost"
+      aria-label="Optical Hand Tracking Feed"
+    >
+      <div class="hud-header">
+        <div class="hud-title-wrap">
+          <span class="hud-indicator-dot"></span>
+          <span class="hud-title">Optical Tracker</span>
+        </div>
+        <div class="hud-controls">
+          <button
+            id="btn-hud-minimize"
+            class="hud-btn"
+            title="Minimize / Expand HUD"
+            aria-label="Minimize HUD"
+          >
+            <i data-lucide="minus"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="hud-video-wrapper" id="hud-video-wrapper">
+        <!-- Mirrored video element stream -->
+        <video id="webcam" playsinline autoplay muted></video>
+        <!-- Landmark overlay canvas -->
+        <canvas id="landmark-canvas"></canvas>
+
+        <!-- Detection Prompt overlay -->
+        <div class="hud-overlay-prompt" id="hud-prompt">
+          <i data-lucide="hand" class="prompt-icon"></i>
+          <span class="prompt-text">Raise hand in frame</span>
+        </div>
+      </div>
+
+      <div class="hud-footer">
+        <span class="hud-badge-tag" id="hud-tracking-state">NO HAND</span>
+        <span class="hud-confidence" id="hud-confidence">0%</span>
+      </div>
+    </aside>
+
+    <!-- Gesture Action Feedback Ping (Center Screen Flash) -->
+    <div id="gesture-flash-feedback" class="gesture-feedback-overlay">
+      <div class="feedback-content">
+        <span class="feedback-icon" id="feedback-icon">👈</span>
+        <span class="feedback-text" id="feedback-text">Swipe Left</span>
+      </div>
+    </div>
+
+    <!-- Bottom-Left Artist Note Card -->
+    <aside class="artist-note-card" aria-label="Curator Statement">
+      <div class="artist-avatar-wrap">
+        <img
+          src="	https://lh3.googleusercontent.com/ogw/AF2bZyhK6fFfg1U7Mm84a3X7Dr1C5ZM9vw_tW3rhp4knhrbZ4og=s64-c-mo"
+          alt="Le Nhat"
+          class="artist-avatar"
+        />
+      </div>
+      <div class="artist-info">
+        <div class="artist-header">
+          <h3 class="artist-name">Le Nhat</h3>
+          <!-- <span class="artist-role">Developer</span> -->
+        </div>
+        <p class="artist-quote">
+          “1% better than yesterday”
+        </p>
+      </div>
+    </aside>
+
+    <!-- Bottom-Right Collection Tag -->
+    <div class="collection-stamp" aria-label="Collection Archive Tag">
+      <span class="stamp-label">Field Notes 2026.</span>
+      <span class="stamp-sub">Vol. I · Archival Monograph</span>
+    </div>
+
+    <!-- Bottom Floating Interactive Control Bar -->
+    <nav class="bottom-control-bar" aria-label="Gallery Controls">
+      <button
+        id="btn-prev"
+        class="control-btn"
+        title="Previous Specimen (👈 Swipe Left)"
+        aria-label="Previous Specimen"
+      >
+        <i data-lucide="chevron-left"></i>
+      </button>
+
+      <div class="artwork-counter-pill" id="artwork-counter-wrap">
+        <span id="artwork-counter">01 / 03</span>
+      </div>
+
+      <button
+        id="btn-inspect"
+        class="control-btn inspect-btn"
+        title="View Archival Field Details (✌️ Victory / Select)"
+        aria-label="View Details"
+      >
+        <i data-lucide="eye"></i>
+        <span class="inspect-label">Examine</span>
+      </button>
+
+      <button
+        id="btn-next"
+        class="control-btn"
+        title="Next Specimen (👉 Swipe Right)"
+        aria-label="Next Specimen"
+      >
+        <i data-lucide="chevron-right"></i>
+      </button>
+
+      <div class="control-divider"></div>
+
+      <button
+        id="btn-zoom-in"
+        class="control-btn"
+        title="Zoom In (👌 Pinch Out)"
+        aria-label="Zoom In"
+      >
+        <i data-lucide="zoom-in"></i>
+      </button>
+
+      <button
+        id="btn-reset"
+        class="control-btn"
+        title="Reset View (☝️ Index Point)"
+        aria-label="Reset View"
+      >
+        <i data-lucide="rotate-ccw"></i>
+      </button>
+
+      <button
+        id="btn-zoom-out"
+        class="control-btn"
+        title="Zoom Out (👌 Pinch In)"
+        aria-label="Zoom Out"
+      >
+        <i data-lucide="zoom-out"></i>
+      </button>
+
+      <div class="control-divider"></div>
+
+      <button
+        id="btn-toggle-cam"
+        class="control-btn"
+        title="Toggle Webcam Feed"
+        aria-label="Toggle Webcam Feed"
+      >
+        <i data-lucide="video"></i>
+      </button>
+    </nav>
+
+    <!-- High-End Editorial Artwork Detail Modal / Overlay -->
+    <div
+      id="artwork-detail-modal"
+      class="modal-backdrop detail-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="detail-title"
+    >
+      <div class="detail-card">
+        <button
+          id="btn-close-detail"
+          class="detail-close-btn"
+          aria-label="Close artwork detail (Esc)"
+        >
+          <i data-lucide="x"></i>
+        </button>
+
+        <div class="detail-content-layout">
+          <!-- Photograph Preview Column -->
+          <div class="detail-image-column">
+            <div class="detail-image-frame">
+              <img
+                id="detail-image"
+                src=""
+                alt="Archival Photograph Preview"
+                class="detail-photo"
+              />
+              <div class="detail-image-matting"></div>
+            </div>
+          </div>
+
+          <!-- Archival Narrative & Technical Metadata Column -->
+          <div class="detail-text-column">
+            <div class="detail-header-meta">
+              <span class="detail-specimen-id" id="detail-specimen-id"
+                >ARCHIVAL SPECIMEN 01 / 03</span
+              >
+              <span class="detail-collection-tag">FIELD NOTES 2026</span>
+            </div>
+
+            <h2 class="detail-title" id="detail-title">
+              The Ghost of Svalbard
+            </h2>
+            <p class="detail-subtitle" id="detail-subtitle">
+              Arctic Apex Predator
+            </p>
+
+            <div class="detail-divider"></div>
+
+            <div class="detail-specs-grid">
+              <div class="spec-item">
+                <span class="spec-label">Date Captured</span>
+                <span class="spec-value" id="detail-date"
+                  >November 12, 2025</span
+                >
+              </div>
+              <div class="spec-item">
+                <span class="spec-label">Field Location</span>
+                <span class="spec-value" id="detail-location"
+                  >Svalbard Archipelago, Norway</span
+                >
+              </div>
+              <div class="spec-item full-width">
+                <span class="spec-label">Optics & Exposure</span>
+                <span class="spec-value" id="detail-camera"
+                  >Leica SL2 · Summicron 90mm f/2.0 · 1/1250s · ISO 100</span
+                >
+              </div>
+              <div class="spec-item full-width">
+                <span class="spec-label">Photographer / Curation</span>
+                <span class="spec-value" id="detail-author">Ethan Vale</span>
+              </div>
+            </div>
+
+            <div class="detail-divider"></div>
+
+            <div class="detail-narrative">
+              <span class="spec-label">Curatorial Field Note</span>
+              <p class="detail-description" id="detail-description">
+                A lone male polar bear traversing pack ice under the pale polar
+                twilight. Observed for three days from drift ice at 79° North,
+                moving in utter silence through sub-zero vapor with unmatched
+                predatory grace.
+              </p>
+            </div>
+
+            <div class="detail-footer-actions">
+              <button
+                id="btn-detail-prev"
+                class="detail-nav-btn"
+                aria-label="Previous artwork"
+              >
+                <i data-lucide="arrow-left"></i>
+                <span>Previous Plate</span>
+              </button>
+              <button
+                id="btn-detail-next"
+                class="detail-nav-btn"
+                aria-label="Next artwork"
+              >
+                <span>Next Plate</span>
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instructions Modal Overlay -->
+    <div
+      id="instructions-modal"
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <span class="modal-eyebrow">Interaction Protocol</span>
+              <h2 id="modal-title" class="modal-title">
+                Gesture Navigation Guide
+              </h2>
+              <p class="modal-subtitle">
+                Navigate the archival 3D cloud through natural hand motions
+              </p>
+            </div>
+          </div>
+          <button
+            id="btn-close-modal"
+            class="modal-close-btn"
+            aria-label="Close guide"
+          >
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <div class="gesture-grid">
+          <!-- Gesture Card: Swipe Left / Right -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">👈 👉</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Swipe Left / Right</h3>
+              <p class="gesture-card-desc">
+                Flick your hand horizontally across the frame to step
+                sequentially to the next or previous plate.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gesture Card: Palm Drag -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">✋</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Open Palm Orbit</h3>
+              <p class="gesture-card-desc">
+                Keep your open palm visible and move it around smoothly to
+                rotate and orbit the 3D gallery.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gesture Card: Pinch Zoom -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">👌</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Pinch Zoom</h3>
+              <p class="gesture-card-desc">
+                Bring your thumb and index tips together to pull camera closer
+                or push outward.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gesture Card: Peace / Select -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">✌️</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Victory / Examine</h3>
+              <p class="gesture-card-desc">
+                Show two fingers upward to open full editorial details and
+                curatorial field notes.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gesture Card: Fist / Pause -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">✊</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Closed Fist</h3>
+              <p class="gesture-card-desc">
+                Form a closed fist to freeze rotation and hold the current
+                orbital perspective.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gesture Card: Point Reset -->
+          <div class="gesture-card">
+            <div class="gesture-card-icon">☝️</div>
+            <div class="gesture-card-info">
+              <h3 class="gesture-card-title">Index Point</h3>
+              <p class="gesture-card-desc">
+                Point your index finger upward to smoothly reset the perspective
+                to the starting specimen.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-tips">
+          <div class="tip-item">
+            <i data-lucide="sun"></i>
+            <span
+              >Maintain gentle, diffused lighting for optimal hand landmark
+              tracking.</span
+            >
+          </div>
+          <div class="tip-item">
+            <i data-lucide="mouse-pointer"></i>
+            <span
+              >Click directly on any 3D photographic plate to inspect it
+              immediately.</span
+            >
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-modal-got-it" class="action-btn">
+            <span>Enter Archive</span>
+            <i data-lucide="arrow-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Curator Studio / Artwork Upload & Management Modal -->
+    <div
+      id="upload-artwork-modal"
+      class="modal-backdrop studio-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="studio-modal-title"
+    >
+      <div class="studio-modal-card">
+        <!-- Modal Header -->
+        <div class="studio-header">
+          <div class="studio-title-group">
+            <span class="modal-eyebrow">Curator Studio</span>
+            <h2 id="studio-modal-title" class="studio-title">
+              Archival Specimen Studio
+            </h2>
+            <p class="studio-subtitle">
+              Expand the 3D exhibition with custom photography and manage your field archive
+            </p>
+          </div>
+          <button
+            id="btn-close-studio"
+            class="modal-close-btn"
+            aria-label="Close Studio (Esc)"
+          >
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <!-- Studio Navigation Tabs -->
+        <div class="studio-tabs-bar" role="tablist">
+          <button
+            id="tab-btn-upload"
+            class="studio-tab is-active"
+            role="tab"
+            aria-selected="true"
+            aria-controls="tab-panel-upload"
+          >
+            <i data-lucide="image-plus"></i>
+            <span>Add Specimen</span>
+          </button>
+          <button
+            id="tab-btn-manage"
+            class="studio-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-panel-manage"
+          >
+            <i data-lucide="archive"></i>
+            <span>Manage Collection (<span id="studio-tab-count">3</span>)</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Upload Specimen Form -->
+        <div
+          id="tab-panel-upload"
+          class="studio-tab-panel is-active"
+          role="tabpanel"
+          aria-labelledby="tab-btn-upload"
+        >
+          <form id="upload-form" class="studio-form" autocomplete="off">
+            <!-- Drag and Drop Image Uploader -->
+            <div class="upload-dropzone-wrap">
+              <input
+                type="file"
+                id="upload-file-input"
+                accept="image/*"
+                class="sr-only"
+                aria-label="Upload artwork image"
+              />
+              <div id="upload-dropzone" class="upload-dropzone" role="button" tabindex="0">
+                <div class="dropzone-empty" id="dropzone-empty">
+                  <div class="dropzone-icon-ring">
+                    <i data-lucide="upload-cloud"></i>
+                  </div>
+                  <h4 class="dropzone-heading">Drop photographic plate here, or <span class="highlight">browse files</span></h4>
+                  <p class="dropzone-hint">Supports JPEG, PNG, WebP · Max 40MB · Optimized for WebGL</p>
+                </div>
+
+                <div class="dropzone-preview is-hidden" id="dropzone-preview">
+                  <img id="upload-preview-img" src="" alt="Specimen Preview" class="preview-thumbnail" />
+                  <div class="preview-meta">
+                    <div class="preview-file-info">
+                      <span class="preview-filename" id="preview-filename">specimen.jpg</span>
+                      <span class="preview-filesize" id="preview-filesize">2.4 MB</span>
+                    </div>
+                    <button
+                      type="button"
+                      id="btn-remove-preview"
+                      class="preview-remove-btn"
+                      title="Replace photograph"
+                    >
+                      <i data-lucide="refresh-cw"></i>
+                      <span>Replace</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Metadata Form Grid -->
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-title" class="form-label">
+                  Specimen Title <span class="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="form-title"
+                  class="form-input"
+                  placeholder="e.g. The Monarch of Bisoke"
+                  required
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="form-subtitle" class="form-label">
+                  Series / Monograph Subtitle
+                </label>
+                <input
+                  type="text"
+                  id="form-subtitle"
+                  class="form-input"
+                  placeholder="e.g. Alpine Highland Solitude"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="form-date" class="form-label">
+                  Date Captured
+                </label>
+                <input
+                  type="text"
+                  id="form-date"
+                  class="form-input"
+                  placeholder="e.g. October 15, 2026"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="form-location" class="form-label">
+                  Field Location
+                </label>
+                <input
+                  type="text"
+                  id="form-location"
+                  class="form-input"
+                  placeholder="e.g. Volcanoes National Park, Rwanda"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="form-camera" class="form-label">
+                  Optics & Exposure Specifications
+                </label>
+                <input
+                  type="text"
+                  id="form-camera"
+                  class="form-input"
+                  placeholder="e.g. Leica SL2 · 90mm f/2.0 · 1/1000s · ISO 100"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="form-author" class="form-label">
+                  Photographer / Curation
+                </label>
+                <input
+                  type="text"
+                  id="form-author"
+                  class="form-input"
+                  placeholder="e.g. Le Nhat"
+                  value="Le Nhat"
+                />
+              </div>
+
+              <div class="form-group full-width">
+                <label for="form-description" class="form-label">
+                  Curatorial Field Notes & Narrative
+                </label>
+                <textarea
+                  id="form-description"
+                  class="form-textarea"
+                  rows="3"
+                  placeholder="Describe the natural habitat encounter, lighting conditions, or wild expedition narrative..."
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="studio-form-actions">
+              <button
+                type="button"
+                id="btn-cancel-upload"
+                class="detail-nav-btn"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                id="btn-submit-upload"
+                class="action-btn"
+              >
+                <i data-lucide="archive"></i>
+                <span>Archive to Collection</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Tab 2: Manage Collection -->
+        <div
+          id="tab-panel-manage"
+          class="studio-tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-btn-manage"
+          hidden
+        >
+          <div class="manage-archive-header">
+            <div class="manage-info">
+              <span class="manage-title">Archival Monograph Inventory</span>
+              <span class="manage-sub" id="manage-sub-count">3 Total Photographic Plates</span>
+            </div>
+            <button
+              id="btn-restore-defaults"
+              class="restore-btn"
+              title="Restore original curated sample archive"
+            >
+              <i data-lucide="rotate-ccw"></i>
+              <span>Restore Default Archive</span>
+            </button>
+          </div>
+
+          <div class="manage-artworks-list" id="manage-artworks-list">
+            <!-- Dynamically populated artwork rows -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Minimalist Editorial Notification Toast -->
+    <div id="studio-toast" class="studio-toast" role="status" aria-live="polite">
+      <span class="toast-icon" id="toast-icon">✨</span>
+      <span class="toast-message" id="toast-message">Specimen archived successfully</span>
+    </div>
+
+    <!-- Initialize Lucide icons on DOM loaded -->
+    <script>
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    </script>
+
+    <!-- Main ES Module Application Script -->
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
